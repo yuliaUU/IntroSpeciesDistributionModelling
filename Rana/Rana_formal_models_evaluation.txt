@@ -1,0 +1,18 @@
+, , RF, RUN1, PA1
+
+    Testing.data Cutoff Sensitivity Specificity
+TSS        0.827    353      96.032      86.667
+ROC        0.957    388      95.635      87.083
+
+, , RF, RUN2, PA1
+
+    Testing.data Cutoff Sensitivity Specificity
+TSS        0.839  163.0      96.825      87.083
+ROC        0.957  147.5      97.222      87.083
+
+, , RF, RUN3, PA1
+
+    Testing.data Cutoff Sensitivity Specificity
+TSS        0.815  374.0      94.048        87.5
+ROC        0.954  374.5      94.048        87.5
+

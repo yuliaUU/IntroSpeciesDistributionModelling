@@ -1,0 +1,45 @@
+Thu Nov 28 11:36:38 EET 2019
+MaxEnt version 3.4.1
+Reading file Back_swd.csv
+readGrid: max memory 954728448, total allocated 257425408, free 215368624, used 42056784, increment 42056784
+Reading samples from Sp_swd.csv
+Read samples: max memory 954728448, total allocated 257425408, free 212684224, used 44741184, increment 2684400
+Making features
+makeFeatures: max memory 954728448, total allocated 257425408, free 197911848, used 59513560, increment 14772376
+Command line used:  environmentallayers=Rana/models/maxent/m_36739223/Back_swd.csv samplesfile=Rana/models/maxent/m_36739223/Sp_swd.csv projectionlayers=Rana/models/maxent/m_36739223/Predictions/Pred_swd.csv outputdirectory=Rana/models/maxent/Rana_AllData_Full_MAXENT.Phillips_outputs outputformat=logistic redoifexists visible=TRUE linear=TRUE quadratic=TRUE product=TRUE threshold=TRUE hinge=TRUE lq2lqptthreshold=80 l2lqthreshold=10 hingethreshold=15 beta_threshold=-1 beta_categorical=-1 beta_lqp=-1 beta_hinge=-1 betamultiplier=1 defaultprevalence=0.5 autorun nowarnings notooltips noaddsamplestobackground
+Command line to repeat: java density.MaxEnt nowarnings noprefixes outputformat=logistic outputdirectory=Rana/models/maxent/Rana_AllData_Full_MAXENT.Phillips_outputs projectionlayers=Rana/models/maxent/m_36739223/Predictions/Pred_swd.csv samplesfile=Rana/models/maxent/m_36739223/Sp_swd.csv environmentallayers=Rana/models/maxent/m_36739223/Back_swd.csv nowarnings notooltips noaskoverwrite threshold noaddsamplestobackground autorun
+Species: Rana_AllData_Full
+Layers: bio_03 bio_07 bio_08 bio_10 bio_16 bio_18
+Layertypes: Continuous Continuous Continuous Continuous Continuous Continuous
+outputformat: logistic
+outputdirectory: Rana/models/maxent/Rana_AllData_Full_MAXENT.Phillips_outputs
+projectionlayers: Rana/models/maxent/m_36739223/Predictions/Pred_swd.csv
+samplesfile: Rana/models/maxent/m_36739223/Sp_swd.csv
+environmentallayers: Rana/models/maxent/m_36739223/Back_swd.csv
+warnings: false
+tooltips: false
+askoverwrite: false
+threshold: true
+addsamplestobackground: false
+autorun: true
+
+getSamples: max memory 954728448, total allocated 257425408, free 197911848, used 59513560, increment 0
+Rana_AllData_Full: 
+Regularization values: linear/quadratic/product: 0.050, categorical: 0.250, threshold: 1.000, hinge: 0.500
+841 samples
+Density: max memory 954728448, total allocated 257425408, free 195223520, used 62201888, increment 2688328
+linearPredictor: max memory 954728448, total allocated 257425408, free 195223520, used 62201888, increment 0
+FeaturedSpace: max memory 954728448, total allocated 257425408, free 195223520, used 62201888, increment 0
+Sequential: max memory 954728448, total allocated 257425408, free 195223520, used 62201888, increment 0
+Initial loss: 5.159055299214529
+Time since start: 1.422
+500: time = 1.248000 loss = -674.081359
+Resulting gain: 679.240414048019
+Projecting...
+Writing file Rana\models\maxent\Rana_AllData_Full_MAXENT.Phillips_outputs\Rana_AllData_Full.csv
+Projecting...
+Reading file Pred_swd.csv
+readGrid: max memory 954728448, total allocated 459800576, free 406224992, used 53575584, increment -8626304
+Writing file Rana\models\maxent\Rana_AllData_Full_MAXENT.Phillips_outputs\Rana_AllData_Full_Pred_swd.csv
+Writing file Rana\models\maxent\Rana_AllData_Full_MAXENT.Phillips_outputs\Rana_AllData_Full_Pred_swd_clamping.csv
+Ending
