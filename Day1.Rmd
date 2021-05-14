@@ -1,0 +1,564 @@
+---
+title: 'ENM Day 1: Introduction'
+output:
+  html_notebook:
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+---
+# Aggregating Rasters
+Loading libraries
+```{r libraries, echo=TRUE, warnings = FALSE, results="hide"}
+library(raster)
+library(rgdal)
+library(maptools)
+library(here)
+```
+
+Set your paths
+
+LIDAR, which stands for Light Detection and Ranging, is a remote sensing method
+results of aggregations saved to aggregation folder 
+```{r,echo=TRUE}
+
+## path to original layers
+path2layers <- here("layers", "lidar","original_vars") 
+
+## path to aggregated layers
+path2agglayers <- here("layers", "lidar","agregated_vars")
+
+```
+
+## Load environmental variables
+
+stack() create one file with several rasters.To have a tsack everything should be having teh same px size and original coordinates.
+```{r,echo=TRUE}
+
+layers<-list.files(path=path2layers,pattern='asc',full.names=TRUE)
+#layers to chack whetehr all is loaded
+
+egv<-stack(layers)## Join all rasters in a single object
+
+```
+
+  - check the structure of the rasters
+```{r,echo=TRUE}
+
+print(egv)
+
+```
+268 rows, 197 columns 
+52796 px and 5 variables
+resolution 1m 
+names: names of var
+
+
+  - check descriptive statistics of the rasters
+```{r}
+
+summary(egv)
+
+```
+
+
+## Plot the stack
+```{r, out.width = "20in", fig.height= 5, fig.width= 9}
+plot(egv)
+```
+
+## Aggregate raster
+
+agregate the stack so you dont have to do it for each stack. 
+
+'aggregate()' input parameters: object; number of pixels to aggregate (10).
+```{r}
+agg<-aggregate(egv,10,fun=mean)
+```
+
+  - check the structure of the aggregated rasters
+```{r}
+print(agg)
+```
+check teh new resolution - should be 10m
+
+  - check descriptive statistics of the aggregated rasters
+```{r}
+summary(agg)
+```
+
+## Loop to export sequentially aggregated stack
+
+remove stack and separate evrything as a separate raster 
+```{r}
+for (i in 1:5) { # there are 5 bands
+  # Select a band sequentially
+  r<-agg[[i]]
+  # Plot the selected band
+  plot(r,main = r@data@names)
+  # Get name of the band
+  name <- r@data@names
+  # export the raster to a folder using paste
+  writeRaster(r, filename=paste(path2agglayers,name,sep=''), format="ascii", overwrite=TRUE)
+}
+```
+
+# Clipping Rasters 
+
+QGIC
+to create clipping shapefile:
+shapefile should be polygons 
+cordinate system WOS
+create attributes 
+
+NAtural https://www.naturalearthdata.com/downloads/10m-physical-vectors/ =>downloads
+
+setting paths
+```{r}
+# path to aggregated layers
+path2agglayers<-here("layers","lidar","aggregated_vars")
+# clipping shapefile
+path2clipshp<-here("layers","lidar","clipping_area.shp")
+# path to clipped layers
+path2cliplayers<-here("layers","lidar","clipped_vars")
+```
+
+Load aggregated environmental variables
+```{r}
+layers<-list.files(path=path2agglayers,pattern='asc',full.names=TRUE)
+```
+
+## Join all rasters in a single object
+```{r}
+egv<-stack(layers)
+```
+
+## check the structure of the rasters
+```{r}
+print(egv)
+```
+
+## check descriptive statistics of the rasters
+```{r}
+summary(egv)
+```
+
+## Plot the stack
+
+call x11() if the following plot is not represented correctly: with x11 a new window is open
+```{r}
+plot(egv)
+```
+
+## Load study area shapefile
+
+shapefile and rasters can be read by readOGR
+```{r}
+shp <- readOGR(path2clipshp)
+```
+
+
+## Plot the shapefile
+
+```{r}
+plot(shp)
+```
+
+## Loop to clip each raster sequentially
+
+because we have a stack: same function applied for each raster 
+
+```{r}
+# clip raster
+# the raster to be clipped; the clipping feature; snap determines in which direction the extent should be aligned
+# to the nearest border, inwards )(in) or outwards (out). in mins crop inside 
+clip.r<-crop(egv, shp, snap="in")
+# plot the clipped raster
+plot(clip.r,main=clip.r@data@names)
+
+
+```
+```{r}
+#mask raster with the shapefile to create NoData. masking does not delete px
+mask.r <- mask(clip.r, shp)
+# plot the masked raster
+plot(mask.r,main = mask.r@data@names)
+```
+
+
+```{r}
+for (i in nlayers(mask.r)) { # look for each ascii file in layers
+  # Get name of the band
+  mask.r.i <- mask.r[[i]]
+  name<- mask.r.i@data@names
+  # export the raster to a folder using paste
+  writeRaster(mask.r.i,paste(path2cliplayers,"clip_",name,sep=''),format="ascii", overwrite=TRUE)
+}
+```
+
+## plot all clipped variables
+```{r}
+files<-list.files(path=path2cliplayers,pattern='asc',full.names=TRUE)
+# Join all rasters in a single object
+clips<-stack(files)
+plot(clips)
+```
+
+# Correlation
+
+Loading paths
+```{r}
+# path to clipped layers
+path2cliplayers<-here("layers","lidar","clipped_vars")
+# path to correlation folder
+path2corr<-here("layers","lidar")
+```
+
+Load environmental variables
+```{r}
+layers<-list.files(path=path2cliplayers,pattern='asc',full.names=TRUE)
+#Join all rasters in a single object
+egv<-stack(layers)
+```
+
+  - check the structure of the rasters
+  
+```{r}
+print(egv)
+```
+  - check descriptive statistics of the rasters
+  
+```{r}
+summary(egv)
+```
+
+## Plot the clipped stack
+
+```{r}
+plot(egv)
+```
+
+## Calculate Pearson's correlation among variables
+
+Pearson's correlation is parametric. SPearman can be used also
+```{r}
+pearson<-layerStats(egv,'pearson',na.rm=T)
+print(pearson)
+```
+you decide which variables to delete. more easier too see dendrogram.
+Count how many var hhas higher correlation and start deleting variables 
+
+## Correlation dendogram 
+
+1. Transform correlation results in a dataframe
+```{r}
+cor.df<-as.data.frame(pearson)
+#Check dataframe structure
+head(cor.df)
+```
+Export dataframe
+```{r}
+write.table(cor.df,paste(path2corr,'var_correlations.csv',sep=''),sep=",")
+```
+
+
+2. Correlation matrix
+
+- Transfrom correlation matrix to distances
+```{r}
+var.dist <- abs(as.dist(cor.df))
+```
+"non-square matrix" is not an error 
+
+- Calculate dendrogram based on distance (less distance = more correlation)
+```{r}
+var.cluster <- hclust(1-var.dist)
+```
+
+- Plot dendrogram
+```{r}
+plot(var.cluster)
+abline(h=0.25, lty=2, lwd=2) # variables that have a correlation < 0.75
+```
+everything below is highly correlated. so we have 4 highly correlated, so chose 2 out of 4 highle correlated one.
+
+you remove to analyze the response curves. if you dont remove correlated var you can't interprete response curve. MaXENT is quite robust to correlation.
+
+- Export correlation graph
+```{r}
+jpeg(paste(path2corr,'correlation_clusters.jpg',sep=''))
+plot(var.cluster)
+abline(h=0.25, lty=2, lwd=2) # variables that have a correlation < 0.75
+#dev.off()
+```
+
+
+# Removing Dublicates
+
+Load library to read species shapefiles and rasters
+```{r, results ="hide"}
+# Load library for remove duplicates
+library(ecospat)
+```
+
+Set your paths
+```{r}
+# path to species folder
+path2sp<-here("layers","lidar", "species")
+# path to species csv folder
+path2spcsv<-here("layers","lidar","species","csv")
+```
+
+path to species shapefiles
+shapefile is point shape file 
+```{r}
+list.shp<-list.files(path2sp,pattern='shp',full.names=TRUE)
+list.shp
+```
+
+Create a empty dataframe to store the results
+
+dont need it if you have dataframe already 
+```{r}
+df = NULL
+
+for (i in list.shp) { 
+  # Read the shapefile of points
+  shp <- readOGR(i)
+  # Plot the shapefile
+  #X11()
+  plot(shp)
+  # Transform the shapefile in a dataframe
+  spp<-as.data.frame(shp)
+  # Check the dataframe
+  # Read the first 5 lines of the dataframe
+  head(spp)
+  # Count the number of rows of the dataframe
+  row1<-nrow(shp)
+  row1
+  # Remove species occurrences in a dataframe that are closer to each other than a specified distance threshold
+  # dfvar: dataframe object
+  # min.dist define the distance threshold: cell size 
+  # colxy: columns with coordinates
+  # colvar: column with the name of the species
+  # plot: map the selected and excluded points
+  occ.sp<-ecospat.occ.desaggregation(spp,min.dist = 10)
+  # Check the dataframe
+  # Read the first 5 lines of the dataframe
+  head(occ.sp)
+  # Count the number of rows of the dataframe with the selected points
+  row2<-nrow(occ.sp)
+  row2
+  # Get coordinates from dataframe
+  occ.x<-occ.sp[,1]
+  occ.y<-occ.sp[,2]
+  # Plot the selected points
+  plot(occ.x,occ.y)
+  #export the dataframe with the selected points
+  # Get name of the band
+  name<-gsub(pattern = "\\.shp$", "", basename(i))
+  write.csv(occ.sp, file= paste0(path2spcsv,name,".csv", sep=''),row.names=FALSE)
+  # Add the number of selected points to the null dataframe
+  df<-rbind(df,data.frame(levels(occ.sp$sp),row1,row2))
+}
+```
+
+
+
+export the null dataframe
+```{r}
+write.csv(df,file=paste(path2spcsv,"df_shp.csv",sep=''),row.names=FALSE)
+```
+
+# Remove Duplicates, selecting uniques
+
+Load library to read species shapefiles and rasters
+```{r}
+library(raster)
+library(maptools)
+library(rgdal)
+# Load library for remove duplicates
+library(dplyr) #to delete duplicated records
+library(ecospat)
+```
+
+Read the shapefile of points
+```{r}
+#shp <- readShapePoints("/home/neftali/Downloads/C_viridis/C.shp")
+```
+
+Plot the shapefile
+```{r}
+plot(shp)
+```
+
+Transform the shapefile in a dataframe
+```{r}
+spp<-as.data.frame(shp)
+# Check the dataframe
+# Read the first 5 lines of the dataframe
+head(spp)
+# Select only the species and coordinate fields
+spp<-spp[,c(2,5,6)]
+# Read the first 5 lines of the dataframe
+head(spp)
+# Rename fields
+colnames(spp)<-c("species","x","y")
+# Read the first 5 lines of the dataframe
+head(spp)
+```
+
+ Check the structure of spp
+```{r}
+str(spp)
+# Select unique records
+spp<-distinct(spp)
+# Check the structure of spp
+str(spp)
+# Count the number of rows of the dataframe
+row1<-nrow(spp)
+row1
+# Remove species occurrences in a dataframe that are closer to each other than a specified distance threshold
+# dfvar: dataframe object
+# min.dist define the distance threshold
+# colxy: columns with coordinates
+# colvar: column with the name of the species
+# plot: map the selected and excluded points
+occ.sp<-ecospat.occ.desaggregation(spp,min.dist=1)
+# Check the dataframe
+# Read the first 5 lines of the dataframe
+head(occ.sp)
+# Count the number of rows of the dataframe with the selected points
+row2<-nrow(occ.sp)
+row2
+# Get coordinates from dataframe
+occ.x<-occ.sp[,1]
+occ.y<-occ.sp[,2]
+# Plot the selected points
+plot(occ.x,occ.y)
+#export the dataframe with the selected points
+# Get name of the band
+write.csv(occ.sp,file=paste("XXXXX.csv",sep=''),row.names=FALSE)
+```
+
+
+# DENSITY PLOTS BACKGROUND/PRESENCE DATA
+
+```{r}
+# Load dismo package
+library(dismo)
+
+```
+Set your paths
+setwd("/home/neftali/Documents/lectures/enm/intro")
+```{r}
+# path to clipped layers
+path2cliplayers<-here("layers","lidar","clipped_vars")
+# path to species csv file
+path2spcsv<-here("layers","lidar","species","csv","Podarcis bocagei.shp.csv")
+# path to species dataframe
+path2spdb<-here("layers","lidar","species","data_pb.txt")
+```
+Load environmental variables
+```{r}
+layers<-list.files(path=path2cliplayers,pattern='asc',full.names=TRUE)
+# make the stack
+egv<-stack(layers)
+# check rasters
+print(egv)
+# Descriptive statistics for environmental layers
+summary(egv)
+# Plot environmental variables on geographical space
+plot(egv)
+```
+Load species records
+```{r}
+data.sp<-read.csv(path2spcsv,sep=",",header=T)
+# Check the structure of the species dataframe
+head(data.sp)
+# Select coordinate fields on species records
+data.sp<-data.sp[c(2,3)]
+# Check the structure of the species dataframe
+head(data.sp)
+# Plot species records on geographical space
+plot(data.sp)
+```
+
+## Extract background data
+```{r}
+# Create a cloud of random points
+backgr<-as.data.frame(randomPoints(egv,500))
+# Check background dataframe
+head(backgr)
+
+```
+gives error as could not do 500 points. 321 only given
+```{r}
+str(backgr)
+```
+
+## Extract environmental data on species records
+```{r}
+data.pres<-extract(egv,data.sp)
+# Check presence dataframe
+str(data.pres)
+# Join coordinates to presence records
+data.pres<-cbind(data.pres,data.sp)
+# Delete NA values from data frame
+#data.pres<-na.omit(data.pres)
+# Check presence dataframe
+str(data.pres)
+
+```
+
+## Extract environmental data on background records
+
+```{r}
+data.backgr<-extract(egv,backgr)
+# Delete NA values from data frame
+data.backgr<-na.omit(data.backgr)
+# Check background dataframe
+str(data.backgr)
+
+```
+coordinates is missing in thso function, so we need to add it 
+
+```{r}
+# Join coordinates to background records
+data.backgr<-cbind(data.backgr,backgr)
+# Check background dataframe
+str(data.backgr)
+```
+
+It is necessary to change the names of fields x/y to long/lat
+If not, coloum names will not match
+# Change number of coloums depeding on the number of egv
+colnames(data.backgr)[6]<-"long"
+colnames(data.backgr)[7]<-"lat"
+# Check background dataframe
+str(data.backgr)
+
+## Join presence and background dataframes
+
+```{r}
+data.pb<-data.frame(rbind(data.pres,data.backgr))
+# Check presence+background dataframe
+str(data.pb)
+```
+Export presence and background dataframe
+```{r}
+write.table(data.pb,file=path2spdb,sep=',')
+```
+
+## Represent species records against background
+
+Presences are blue
+```{r}
+for (j in names(egv)) {
+  hist(data.backgr[,j],freq=T,main=j) # returns the density data
+  hist(data.pres[,j],freq=T,col='red',add=T) # returns the density data
+}
+
+```
+
+empty one is not distrubeted normally so need to increase the size of teh area
+red histogram: presences 

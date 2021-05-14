@@ -1,0 +1,792 @@
+---
+title: "ENM Day 4: Simple Species Modeling MAXENT"
+output: 
+  html_notebook:
+    number_sections: true
+    theme: cerulean
+    toc: true
+---
+
+#####################################################
+############### MAXENT WITH DISMO ###################
+#####################################################
+MAXENT wont work if Folders are named with a space !!
+# Load libraries
+```{r}
+library(raster)
+library(rgdal)
+library(maptools)
+library(here)
+# Load dismo package
+library(dismo)
+library(rJava)
+```
+
+
+```{r}
+
+# path to species
+path2sp<-here("layers","worldclim","species","dismo_rana.txt")
+# path to layers
+path2layers<-here("layers","worldclim","current")
+# path to data train database
+path2train<-here("results","dismo","rana_data.train.txt")
+# path to data test database
+path2test<-here("results","dismo","rana_data.test.txt")
+# path to data background database
+path2backg<-here("results","dismo","rana_data.backgr.txt")
+# path to maxent jar file in dismo
+path2jar<-here("results","dismo","maxent")
+# path to maxent tif model
+path2tif<-here("results","dismo","maxent","maxent_prediction_rana.tif")
+# path to maxent model
+path2maxent<-here("results","dismo","maxent","me.rana")
+# path to maxent thresholded model
+path2maxenttr<-here("results","dismo","maxent","tr_me_rana")
+# path to future 2020 laters
+path2020<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2020")
+# path to future 2020 models
+path2models2020<-here("results","dismo","maxent","me_rana_2020")
+# path to future 2050 laters
+path2050<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2050")
+# path to future 2050 models
+path2models2050<-here("results","dismo","maxent","me_rana_2050")
+# path to future 2080 laters
+path2080<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2080")
+# path to future 2080 models
+path2models2080<-here("results","dismo","maxent","me_rana_2080")
+
+```
+
+
+######################################################
+# PREPARING DATA
+
+# Load environmental variables
+```{r}
+layers<-list.files(path=path2layers,pattern='asc',full.names=TRUE)
+# Make the stack
+egv<-stack(layers)
+# Check the stack structure
+print(egv)
+```
+
+
+# Descriptive statistics for environmental layers
+```{r}
+summary(egv)
+# Select variables to include in the model
+names(egv)
+egv<-egv[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check the stack structure
+print(egv)
+```
+
+
+# Plot environmental variables on geographical space
+```{r}
+plot(egv)
+```
+
+
+# Load species records
+```{r}
+data.sp<-read.csv(path2sp,sep=",",header=T)
+# Check the structure of the species dataframe
+head(data.sp)
+# Plot species records on geographical space
+plot(data.sp)
+```
+
+# Split species records in training and testing data
+## Using sample function
+## 0.3 corresponds to testing proportion
+```{r}
+indexes = sample(1:nrow(data.sp),size=0.3*nrow(data.sp))
+```
+
+
+## Split data in training and testing
+```{r}
+data.train = data.sp[-indexes,]
+data.test = data.sp[indexes,]
+# Check training dataframe
+head(data.train)
+str(data.train)
+# Check testing dataframe
+head(data.test)
+str(data.test)
+```
+
+# Extract background data
+```{r}
+# Create a cloud of random points
+backgr<-as.data.frame(randomPoints(egv,500))
+# Check background dataframe
+head(backgr)
+str(backgr)
+```
+
+
+# Export training, test, and background data
+```{r}
+write.table(data.train,file=path2train,sep='')
+write.table(data.test,file=path2test,sep='')
+write.table(backgr,file=path2backg,sep='')
+```
+
+
+
+######################################################
+# MAXENT WITH DISMO
+
+# only run if the maxent.jar file is available,in the right folder
+# Copy maxent.jar to /home/neftali/R/x86_64-pc-linux-gnu-library/3.2/dismo/java
+```{r}
+jar<-paste(system.file(package="dismo"),"/java/maxent.jar",sep='')
+```
+
+
+# Calculate model with MAXENT parameters
+# Choose parameters
+# See maxent function in R help
+# See maxent parameters in maxent help
+```{r}
+?dismo::maxent
+me<-maxent(egv,data.train,args=c("randomseed","writeclampgrid","betamultiplier=1","responsecurves","jackknife","pictures","replicates=1"),removeDuplicates=TRUE,path=path2jar)
+
+```
+
+# Calculate model
+# 'biome' is a categorical variable
+#me<-maxent(egv,data.train,factors='biome',....)
+# See the maxent results in a browser
+```{r}
+me
+```
+
+# Plot importance of each variable
+```{r}
+plot(me)
+```
+
+# Response curves
+```{r}
+response(me)
+```
+
+
+# Project the model
+```{r}
+p.me<-predict(me,egv,args=c("outputformat=logistic"),progress='text',filename=path2tif,overwrite=TRUE)
+plot(p.me)
+points(data.train)
+```
+
+
+# Export Maxent model
+```{r}
+writeRaster(p.me,path2maxent,format="HFA",overwrite=TRUE)
+```
+
+
+# Evaluate the model
+```{r}
+e.me<-dismo::evaluate(me,p=data.test,a=backgr,x=egv)
+e.me
+```
+AUC value is different from html generated  because we using test dat anad in html we uses train data
+
+# Check the evaluation results
+```{r}
+str(e.me)
+```
+
+
+# Boxplot of presence and absence suitable values
+# blue are absences, red are presences
+```{r}
+boxplot(e.me,col=c('blue','red'))
+```
+
+
+# Density plot of presence and absence suitable values
+# blue are absences, red are presences
+```{r}
+density(e.me)
+```
+
+
+# Evaluation plots
+```{r}
+par(mfrow=c(3,3))
+# ROC
+plot(e.me,'ROC')
+# CCR: Correct classification rate
+plot(e.me,'CCR')
+# TPR: True positive rate
+plot(e.me,'TPR')
+# TNR: True negative rate
+plot(e.me,'TNR')
+# FPR: False positive rate
+plot(e.me,'FPR')
+# FNR: False negative rate
+plot(e.me,'FNR')
+# PPP: Positive predictive power
+plot(e.me,'PPP')
+# NPP: Negative predictive power
+plot(e.me,'NPP')
+# kappa: Cohen's kappa
+plot(e.me,'kappa')
+par(mfrow=c(1,1))
+```
+
+
+
+# Obtain the threshold
+# kappa: the threshold at which kappa is highest ("max kappa")
+# spec_sens: the threshold at which the sum of the sensitivity (true positive rate) and specificity (true negative rate) is highest
+# no_omission: the highest threshold at which there is no omission
+# prevalence: modeled prevalence is closest to observed prevalence
+# equal_sens_spec: equal sensitivity and specificity
+# sensitivity: fixed (specified) sensitivity
+```{r}
+tr<-threshold(e.me,'prevalence')
+# Get the value of the threshold
+tr
+```
+
+
+
+# Get the value of all thresholds
+```{r}
+tr<-threshold(e.me)
+tr[,6]
+```
+
+
+# Calculate the thresholded model
+```{r}
+tr.me<-p.me>(tr[,6])
+# Plot the p/a model in the geographical space
+tr.me
+```
+
+
+```{r}
+plot(tr.me)
+```
+
+
+# Export p/a model
+```{r}
+writeRaster(tr.me,path2maxenttr,format="HFA",overwrite=TRUE)
+```
+
+
+
+# Plot raw and p/a models
+```{r}
+par(mfrow=c(1,2))
+plot(p.me,main='Maxent, raw values')
+points(data.train,pch='+')
+plot(tr.me,main='presence/absence')
+points(data.test,pch='+')
+
+# Reset par function
+par(mfrow=c(1,1))
+```
+
+
+
+
+######################################################
+# PROJECTING MODELS TO OTHER SCENARIOS
+```{r}
+# Load environmental variables for 2020
+layers2020<-list.files(path=path2020,pattern='asc',full.names=TRUE)
+# Make the stack
+egv2020<-stack(layers2020)
+# Check the stack structure
+print(egv2020)
+# Descriptive statistics for environmental layers
+summary(egv2020)
+# Select variables to include in the model
+egv2020<-egv2020[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check the stack structure
+print(egv2020)
+# Plot environmental variables on geographical space
+plot(egv2020)
+```
+
+
+
+# Load environmental variables for 2050
+```{r}
+layers2050<-list.files(path=path2050,pattern='asc',full.names=TRUE)
+# Make the stack
+egv2050<-stack(layers2050)
+# Check the stack structure
+print(egv2050)
+# Descriptive statistics for environmental layers
+summary(egv2050)
+# Select variables to include in the model
+egv2050<-egv2050[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check the stack structure
+print(egv2050)
+```
+
+
+
+# Load environmental variables for 2080
+```{r}
+layers2080<-list.files(path=path2080,pattern='asc',full.names=TRUE)
+# Make the stack
+egv2080<-stack(layers2080)
+# Check the stack structure
+print(egv2080)
+# Descriptive statistics for environmental layers
+summary(egv2080)
+# Select variables to include in the model
+egv2080<-egv2080[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check the stack structure
+print(egv2080)
+# Plot environmental variables on geographical space
+plot(egv2080)
+```
+
+
+
+# Project the model to 2020
+```{r}
+p.me.20 = predict(egv2020,me)
+p.me.20
+# Plot the model in the geographical space
+
+plot(p.me.20)
+```
+
+
+# Export Maxent model
+```{r}
+writeRaster(p.me.20,path2models2020,format="HFA",overwrite=TRUE)
+```
+
+
+
+# Project the model to 2050
+```{r}
+p.me.50 = predict(egv2050,me)
+p.me.50
+# Plot the model in the geographical space
+
+plot(p.me.50)
+```
+
+
+# Export Maxent model
+```{r}
+writeRaster(p.me.50,path2models2050,format="HFA",overwrite=TRUE)
+```
+
+
+
+# Project the model to 2080
+```{r}
+p.me.80 = predict(egv2080,me)
+p.me.80
+# Plot the model in the geographical space
+plot(p.me.80)
+```
+
+
+# Export Maxent model
+```{r}
+writeRaster(p.me.80,path2models2080,format="HFA",overwrite=TRUE)
+```
+
+
+
+# Plot Maxent current and future models
+```{r}
+par(mfrow=c(2,2))
+plot(p.me,main='Maxent current')
+plot(p.me.20,main='Maxent 2020')
+plot(p.me.50,main='Maxent 2050')
+plot(p.me.80,main='Maxent 2080')
+# Reset par function
+par(mfrow=c(1,1))
+
+```
+
+# MAXENT WITH BIOMOD2
+
+
+
+# load the library
+```{r, results= "hide}
+library(biomod2)
+library(here)
+```
+path to files and locations
+
+```{r}
+library(here)
+# path to species
+path2sp<-here( "layers" , "worldclim" , "species" , "biomod_rana.csv")
+# path to layers
+path2layers<-here( "layers" , "worldclim" , "current")
+# path to maxent jar file
+path2maxent<-here( "R" , "04_maxent" , "maxent" )
+# path to working directory
+path2work<-here( "results" , "biomod" , "maxent" )
+# path to future 2020 laters
+path2020<-here( "layers" , "worldclim" , "future" , "Iberia_wcB2a_10_hadcm3_2020")
+# path to future 2020 models
+path2models2020<-here("Rana" , "proj_future2020")
+# path to future 2050 laters
+path2050<-here( "layers" , "worldclim" , "future" , "Iberia_wcB2a_10_hadcm3_2050")
+# path to future 2050 models
+path2models2050<-here( "Rana" , "proj_future2050")
+# path to future 2080 laters
+path2080<-here( "layers" , "worldclim" , "future" , "Iberia_wcB2a_10_hadcm3_2080")
+# path to future 2080 models
+path2models2080<-here( "Rana" , "proj_future2080")
+
+```
+
+
+########################################
+# load our species data
+```{r}
+DataSpecies <- read.csv(path2sp,sep=',')
+# Check species data
+head(DataSpecies)
+str(DataSpecies)
+```
+
+
+
+# the name of studied species
+```{r}
+myRespName <- 'Rana'
+
+# the presence/absences data for our species 
+myResp <- as.numeric(DataSpecies[,myRespName])
+
+# the XY coordinates of species data
+myRespXY <- DataSpecies[,c("X_WGS84","Y_WGS84")]
+
+```
+
+
+
+# load the environmental raster layers
+```{r}
+layers<-stack(list.files(path=path2layers,pattern='asc',full.names=TRUE ))
+# Descriptive statistics for environmental layers
+summary(layers)
+```
+
+
+# Select variables to include in the model
+```{r}
+names(layers)
+myExpl<-layers[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Plot environmental variables on geographical space
+plot(myExpl)
+```
+
+
+
+# Formating data
+```{r}
+myBiomodData <- BIOMOD_FormatingData(
+  resp.var = myResp, 
+  expl.var = myExpl, 
+  resp.xy = myRespXY, 
+  resp.name = myRespName)
+
+# print_formating_data
+myBiomodData
+
+```
+
+#: plot_formating_data
+```{r}
+plot(myBiomodData)
+```
+number of point per latitude : grey stuff at teh edges
+
+
+# Defining MAXENT Mododelling options 
+# Consult help
+?BIOMOD_ModelingOptions
+```{r}
+?BIOMOD_ModelingOptions
+myBiomodOption <- BIOMOD_ModelingOptions(MAXENT.Phillips = list(path_to_maxent.jar=path2maxent, 
+                         memory_allocated=1024,
+                         maximumiterations = 500, 
+                         visible = TRUE, # to view maxent running
+                         linear = TRUE,
+                         quadratic = TRUE, 
+                         product = TRUE, # not recommended
+                         threshold = TRUE, 
+                         hinge = TRUE, 
+                         lq2lqptthreshold = 80, 
+                         l2lqthreshold = 10, 
+                         hingethreshold = 15, 
+                         beta_threshold = -1, 
+                         beta_categorical = -1, 
+                         beta_lqp = -1, 
+                         beta_hinge = -1, 
+                         betamultiplier = 1,# changed
+                         defaultprevalence = 0.5))
+
+```
+
+
+# Computing the models 
+# See help
+?BIOMOD_Modeling
+```{r}
+myBiomodModelOut <- BIOMOD_Modeling( myBiomodData, 
+                                     models =  'MAXENT.Phillips',
+                                     models.options = myBiomodOption, 
+                                     NbRunEval=1, # number of Evaluation run
+                                     DataSplit=70, # % of data used as training
+                                     VarImport=3, # number of permutation to estimate var importance
+                                     models.eval.meth = 'ROC', # evaluation metrics
+                                     SaveObj = TRUE,# keep all results and outputs on hard drive
+                                     rescal.all.models = FALSE, # all models scaled with a binomial GLM
+                                     modeling.id = "maxent") # ID (=name) of modeling procedure
+
+
+# modeling_summary
+myBiomodModelOut
+```
+
+
+
+# get all models evaluation 
+```{r}
+myBiomodModelEval<-get_evaluations(myBiomodModelOut) 
+myBiomodModelEval
+```
+
+
+
+# print the dimnames of this object
+```{r}
+dimnames(myBiomodModelEval)
+```
+
+
+
+# print the ROC scores of all selected models
+```{r}
+myBiomodModelEval["ROC","Testing.data",,,]
+```
+
+
+
+# print variable importances
+```{r}
+get_variables_importance(myBiomodModelOut)
+```
+
+
+
+# save models evaluation scores and variables importance on hard drive
+```{r}
+capture.output(get_evaluations(myBiomodModelOut),
+               file=file.path(myRespName, 
+                              paste(myRespName,"_formal_models_evaluation.txt", sep="")))
+
+capture.output(get_variables_importance(myBiomodModelOut),
+               file=file.path(myRespName, 
+                              paste(myRespName,"_formal_models_variables_importance.txt", sep="")))  
+
+```
+
+
+# Project models over studied area 
+```{r}
+myBiomodProj <- BIOMOD_Projection(
+  modeling.output = myBiomodModelOut, # modelling results
+  new.env = myExpl, # environmental variables (here, current climate variables)
+  proj.name = 'current', # name of the projections
+  selected.models = 'all', # models to be projected
+  binary.meth = 'ROC', # a vector of a subset of models evaluation method computed before
+  build.clamping.mask = T, # if TRUE, a clamping mask will be saved on hard drive different
+  output.format = '.img') # the format of the GIS files: .RData, .grd or .img
+
+# summary of created object
+myBiomodProj
+```
+
+
+
+###################################################
+# Projection to future conditions
+
+
+```{r}
+# Load environmental variables for 2020
+layers2020<-stack(list.files(path=path2020,pattern='asc',full.names=TRUE))
+# Descriptive statistics for environmental layers
+summary(layers2020)
+```
+
+
+# Select variables to include in the model
+```{r}
+names(layers2020)
+egv2020<-layers2020[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+
+```
+
+
+# Plot environmental variables on geographical space
+```{r}
+plot(egv2020)
+```
+
+
+```{r}
+myBiomodProj2020 <- BIOMOD_Projection(
+  modeling.output = myBiomodModelOut,
+  new.env = egv2020,
+  proj.name = 'future2020',
+  selected.models = 'all',
+  binary.meth = 'ROC',
+  build.clamping.mask = T,
+  output.format = '.img')
+
+# print summary
+myBiomodProj2020
+```
+
+
+
+# files created on hard drive
+```{r}
+list.files(path2models2020)
+```
+
+
+
+# Load environmental variables for 2050
+```{r}
+layers2050<-stack(list.files(path=path2050,pattern='asc',full.names=TRUE))
+# Descriptive statistics for environmental layers
+summary(layers2050)
+```
+
+
+# Select variables to include in the model
+```{r}
+names(layers2050)
+egv2050<-layers2050[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+```
+
+
+# Plot environmental variables on geographical space
+```{r}
+plot(egv2050)
+```
+
+
+```{r}
+myBiomodProj2050 <- BIOMOD_Projection(
+  modeling.output = myBiomodModelOut,
+  new.env = egv2050,
+  proj.name = 'future2050',
+  selected.models = 'all',
+  binary.meth = 'ROC',
+  build.clamping.mask = T,
+  output.format = '.img')
+
+```
+
+
+# print summary
+```{r}
+myBiomodProj2050
+```
+
+
+
+# files created on hard drive
+```{r}
+
+list.files(path2models2050)
+```
+
+
+# Load environmental variables for 2080
+```{r}
+layers2080<-stack(list.files(path=path2080,pattern='asc',full.names=TRUE))
+# Descriptive statistics for environmental layers
+summary(layers2080)
+```
+
+
+# Select variables to include in the model
+```{r}
+names(layers2080)
+egv2080<-layers2080[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+```
+
+
+# Plot environmental variables on geographical space
+```{r}
+plot(egv2080)
+```
+
+
+```{r}
+myBiomodProj2080 <- BIOMOD_Projection(
+  modeling.output = myBiomodModelOut,
+  new.env = egv2080,
+  proj.name = 'future2080',
+  selected.models = 'all',
+  binary.meth = 'ROC',
+  build.clamping.mask = T,
+  output.format = '.img')
+
+# print summary
+myBiomodProj2080
+
+```
+
+
+# files created on hard drive
+```{r}
+list.files(path2models2080)
+```
+
+
+
+# Plot Bioclim current and future models
+```{r}
+plot(myBiomodProj)
+plot(myBiomodProj2020)
+plot(myBiomodProj2050)
+plot(myBiomodProj2080)
+```
+
+
+RF forest worked better , this one selected areas where species cant exist
+
+```{r}
+myRespPlot2D <- response.plot2(models  = myRF,
+                               Data = get_formal_data(myBiomodModelOut,'expl.var'), 
+                               show.variables= get_formal_data(myBiomodModelOut,'expl.var.names'),
+                               do.bivariate = FALSE,
+                               fixed.var.metric = 'median',
+                               col = c("blue", "red"),
+                               legend = TRUE,
+                               data_species = get_formal_data(myBiomodModelOut,'resp.var'))
+```
+

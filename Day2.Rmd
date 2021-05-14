@@ -1,0 +1,761 @@
+---
+title: "ENM Day 2: Dismo"
+output: 
+  html_notebook:
+    number_sections: true
+    theme: cerulean
+    toc: true
+---
+in dismo you just need a coordinates
+long and lat only
+
+Load dismo package
+```{r libraries, echo=TRUE, warnings = FALSE, results="hide"}
+library(raster)
+library(dismo)
+library(rgdal)
+library(here)
+```
+
+Set paths to the files 
+```{r}
+# path to original layers
+path2layers<-here("layers","worldclim","current")
+# path to sp
+path2sp<-here("layers","worldclim","species","dismo_rana.txt")
+# path to training data
+path2train<-here("results","dismo","rana_data.train.txt") # train
+# path to test data
+path2test<-here("results","dismo","rana_data.test.txt") #test data
+# path to background data
+path2backg<-here("results","dismo","rana_data.backgr.txt") # absense data
+
+# path to bioclim model
+path2bioclim<-here("results","dismo","bioclim","bc_rana")
+# path to bioclim thresholded model))
+path2bioclimtr<-here("results","dismo","bioclim","tr_bc_rana")
+# path to domain model
+path2domain<-here("results","dismo","domain","dm_rana")
+# path to dismo thresholded model
+path2domaintr<-here("results","dismo","domain","tr_dm_rana")
+
+
+# path to future 2020 layers
+path2020<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2020")
+# path to future 2050 layers
+path2050<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2050")
+# path to future 2080 layers
+path2080<-here("layers","worldclim","future","Iberia_wcB2a_10_hadcm3_2080")
+
+# path to projected 2020 bioclim model
+path2bioclim2020<-here("results","dismo","bioclim","bc_rana_2020")
+# path to projected 2050 bioclim model
+path2bioclim2050<-here("results","dismo","bioclim","bc_rana_2050")
+# path to projected 2080 bioclim model
+path2bioclim2080<-here("results","dismo","bioclim","bc_rana_2080")
+
+# path to projected 2020 domain model
+path2domain2020<-here("results","dismo","domain","dm_rana_2020")
+# path to projected 2050 domain model
+path2domain2050<-here("results","dismo","domain","dm_rana_2050")
+# path to projected 2080 domain model
+path2domain2080<-here("results","dismo","domain","dm_rana_2080")
+```
+
+# PREPARING DATA
+
+Load environmental variables
+```{r}
+layers<-list.files(path=path2layers,pattern='asc',full.names=TRUE)
+layers
+```
+Make the stack 
+```{r}
+egv<-stack(layers)
+# Check egv structure
+print(egv)
+```
+
+Descriptive statistics for environmental layers
+```{r}
+summary(egv)
+```
+
+Select variables to include in the model
+
+
+Envelope algorythms are not affected by correlation between envir variables.so not nessasarily to select var with lower correlation
+```{r}
+names(egv)
+#egv<-egv[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+```
+Check egv structure
+```{r}
+print(egv)
+```
+
+Plot environmental variables on geographical space
+```{r}
+plot(egv,nc = 5)
+```
+
+Load species records
+```{r}
+data.sp<-read.csv(path2sp,sep=",",header=T)
+# Check the structure of the species dataframe
+head(data.sp)
+```
+Plot species records on geographical space
+```{r}
+plot(data.sp)
+```
+
+## Split species records in training and testing data
+
+Using `sample()` function. 0.3 corresponds to testing proportion. 
+30 % is test data, 70% are training data
+```{r}
+indexes = sample(1:nrow(data.sp),size = 0.3*nrow(data.sp))
+## Split data in training and testing
+data.train = data.sp[-indexes,]
+data.test = data.sp[indexes,]
+```
+
+Check training dataframe
+```{r}
+head(data.train)
+str(data.train)
+```
+
+Check testing dataframe
+```{r}
+head(data.test)
+str(data.test)
+```
+
+
+## Extract background data
+
+Create a cloud of random points
+this is absenses
+
+if we dont put `data.train,excludep= T` we generate the background
+```{r}
+abs<-as.data.frame(randomPoints(egv,500, data.train,excludep= T))
+# to ensure that absenses are not close to presenses: data.train,excludep= T
+#Check background dataframe
+head(abs)
+str(abs)
+```
+
+
+Export training, test, and background data
+```{r}
+write.table(data.train, file = path2train, sep='')
+write.table(data.test, file = path2test, sep='')
+write.table(abs, file = path2backg, sep='')
+```
+
+## Plot training, test, and absense data on geographical space
+```{r}
+par(mfrow=c(1,3))
+plot(data.train,main="training data for Rana")
+plot(data.test,main="test data for Rana")
+plot(abs,main="absense data for Rana")
+
+# Reset par function
+par(mfrow=c(1,1))
+
+```
+
+# BIOCLIM Model
+
+Calculate model
+put env and test data
+```{r}
+bc<-bioclim(egv,data.train)
+bc
+```
+
+## Plot presence and absence (background) data
+
+1. Colinearity in the environmental data
+
+```{r}
+# most likely Pearson
+pairs(bc)
+```
+
+2. Plot the model in the environmental space
+    a: variable in X axis
+    b: variable in Y axis
+    p: percentile threshold
+1 is 1st var, 2 is 2nd variable: they are stored alphabetically
+red-excluded
+green included
+```{r}
+plot(bc,a=1,b=2,p=1)
+plot(bc,a=1,b=2,p=0.95)
+plot(bc,a=1,b=2,p=0.90)
+plot(bc,a=1,b=2,p=0.85)
+plot(bc,a=1,b=2,p=0.80)
+plot(bc,a=1,b=2,p=0.75)
+plot(bc,a=1,b=2,p=0.70)
+plot(bc,a=1,b=2,p=0.65)
+plot(bc,a=1,b=2,p=0.60)
+plot(bc,a=1,b=2,p=0.50)
+```
+    
+3. Project the model
+```{r}
+p.bc<-predict(bc,egv)
+p.bc
+```
+
+4. Plot the model in the geographical space
+
+habitat suitability index: 1- perfect. des not have to do for presense of the species. by default "p = 95" not a p-value
+```{r}
+plot(p.bc)
+```
+5. Plot variable response curves
+```{r}
+response(bc)
+```
+
+##  Export Bioclim model
+
+check raster formats available to export the results ?writeFormats. "HFA" is .img
+```{r}
+
+writeRaster(p.bc,path2bioclim,format="HFA",overwrite=TRUE)
+```
+
+## Evaluate the model
+
+```{r}
+e.bc<-dismo::evaluate(data.test,abs,bc,egv)
+e.bc
+```
+  - 251 prsense, 500 absenses
+  - max TPR+TNR is a Threshold
+
+Check the evaluation results
+```{r}
+str(e.bc)
+```
+
+## Boxplot of presence and absence suitable values
+
+blue are absences, red are presences
+```{r}
+boxplot(e.bc,col=c('blue','red'), notch=FALSE)
+```
+
+## Density plot of presence and absence suitable values
+
+how well destingish the absenses agains the presenses- overlap quite a lot, so that means that there are absenses with similar env var as presenses
+
+blue are absences, red are presences
+```{r}
+density(e.bc)
+```
+
+## Evaluation plots
+
+```{r}
+par(mfrow=c(3,3))
+plot(e.bc,'ROC')
+plot(e.bc,'CCR')
+plot(e.bc,'TPR')
+plot(e.bc,'TNR')
+plot(e.bc,'FPR')
+plot(e.bc,'FNR')
+plot(e.bc,'PPP')
+plot(e.bc,'NPP')
+plot(e.bc,'kappa')
+#Reset par function
+par(mfrow=c(1,1))
+```
+
+## Obtain the threshold
+
+- kappa: the threshold at which kappa is highest ("max kappa")
+- spec_sens: the threshold at which the sum of the sensitivity (true positive rate) and specificity (true negative rate) is highest
+- no_omission: the highest threshold at which there is no omission
+- prevalence: modeled prevalence is closest to observed prevalence
+- equal_sens_spec: equal sensitivity and specificity
+- sensitivity: fixed (specified) sensitivity
+```{r}
+tr.b<-threshold(e.bc,'spec_sens')
+# Get the value of the threshold
+tr.b
+```
+presense only data has very small threshhold 
+
+## Calculate the thresholded model
+
+to select all pixels that pass a treshold 
+```{r}
+tr.bc<- p.bc > tr.b
+tr.bc
+```
+
+Plot the p/a model in the geographical space
+```{r}
+plot(tr.bc)
+```
+
+Export p/a model
+```{r}
+writeRaster(tr.bc,path2bioclimtr,format="HFA",overwrite=TRUE)
+```
+
+## Plot raw model and p/a models (threshold model)
+
+```{r}
+par(mfrow=c(1,2))
+plot(p.bc,main='Bioclim, raw values')
+points(data.train,pch='+')
+plot(tr.bc,main='presence/absence')
+points(data.train,pch='+')
+# Reset par function
+par(mfrow=c(1,1))
+```
+to be very conservative choose teh highest threshold 
+
+# DOMAIN Model
+
+Calculate the model
+```{r}
+dm<-domain(egv,data.train)
+dm
+```
+
+## Plot presence and absence (background) data
+
+Colinearity in the environmental data
+```{r}
+pairs(dm)
+```
+
+Project the model
+```{r}
+p.dm<-predict(egv,dm)
+p.dm
+```
+Plot the model in the geographical space
+```{r}
+plot(p.dm)
+```
+Plot variable response curves
+```{r}
+response(dm)
+```
+
+## Export Domain model
+
+```{r}
+writeRaster(p.dm,path2domain,format="HFA",overwrite=TRUE)
+```
+
+## Evaluate the model
+
+```{r}
+e.dm<-dismo::evaluate(data.test,abs,dm,egv)
+e.dm
+```
+
+Check the evaluation results
+```{r}
+str(e.dm)
+```
+
+Boxplot of presence and absence suitable values
+blue are absences, red are presences
+```{r}
+boxplot(e.dm,col=c('blue','red'))
+```
+
+Density plot of presence and absence suitable values
+ blue are absences, red are presences
+```{r}
+density(e.dm)
+```
+
+## Evaluation plots
+
+1. ROC
+```{r}
+par(mfrow=c(3,3))
+plot(e.dm,'ROC')
+plot(e.dm,'CCR') #CCR: Correct classification rate
+plot(e.dm,'TPR') #TPR: True positive rate
+plot(e.dm,'TNR') #TNR: True negative rate
+plot(e.dm,'FPR') #FPR: False positive rate
+plot(e.dm,'FNR') #FNR: False negative rate
+plot(e.dm,'PPP') #PPP: Positive predictive power
+plot(e.dm,'NPP') #NPP: Negative predictive power
+plot(e.dm,'kappa') # kappa: Cohen’s kappa
+#Reset par function
+par(mfrow=c(1,1))
+```
+
+## Obtain the threshold
+
+- kappa: the threshold at which kappa is highest ("max kappa")
+- spec_sens: the threshold at which the sum of the sensitivity (true positive rate) and specificity (true negative rate) is highest
+- no_omission: the highest threshold at which there is no omission
+- prevalence: modeled prevalence is closest to observed prevalence
+- equal_sens_spec: equal sensitivity and specificity
+- sensitivty: fixed (specified) sensitivity
+```{r}
+tr.d<-threshold(e.dm,'spec_sens')
+# Get the value of the threshold
+tr.d
+```
+threshhold is high probably because domain is not very well implemented in DISMO
+
+## Calculate the thresholded model
+
+```{r}
+tr.dm<-p.dm>tr.d
+tr.dm
+```
+
+## Plot the p/a model in the geographical space
+
+```{r}
+plot(tr.dm)
+```
+
+Export p/a model
+```{r}
+writeRaster(tr.dm,path2domaintr,format="HFA",overwrite=TRUE)
+```
+
+## Plot raw and p/a models
+
+```{r}
+par(mfrow=c(1,2))
+plot(p.dm,main='Domain, raw values')
+points(data.train,pch='+')
+plot(tr.dm,main='presence/absence')
+points(data.train,pch='+')
+# Reset par function
+par(mfrow=c(1,1))
+```
+
+# Plot Comparision Bioclim and Domain
+
+key difference between teh models:
+study area for var 1 and var 2 ( x vs y) 
+
+- DISMO draws a rectangle over all the points 
+- DOMAIN draws more fitted polygons
+
+
+```{r}
+par(mfrow=c(1,2))
+plot(tr.bc,main='Bioclim')
+plot(tr.dm,main='Domain')
+# Reset par function
+par(mfrow=c(1,1))
+```
+
+# ENSEMBLE MODELS
+
+## Mean raw model
+```{r}
+avg<-((p.bc+p.dm)/2)
+
+plot(avg)
+```
+
+## Mean p/a model
+
+mean of the threshold models 
+```{r}
+avg2<-((tr.dm+tr.bc)/2)
+plot(avg2)
+```
+
+## Mean model weighted by AUC values
+```{r}
+avg3<-(((p.bc*e.bc@auc)+(p.dm*e.dm@auc))/2)
+plot(avg3)
+```
+
+Plot mean models
+```{r}
+par(mfrow=c(1,2))
+plot(avg)
+plot(avg2)
+```
+
+Difference between p/a models
+```{r}
+par(mfrow=c(1,1))
+diff.m<-abs(tr.dm-tr.bc)
+plot(diff.m)
+```
+difference shows areas of disagreement between the models 
+
+# PROJECTING MODELS TO OTHER SCENARIOS
+
+## 2020
+Load environmental variables for 2020
+```{r}
+layers2020<-list.files(path=path2020,pattern='asc',full.names=TRUE)
+```
+
+Make the stack
+```{r}
+egv2020<-stack(layers2020)
+# Check egv structure
+print(egv2020)
+```
+
+Descriptive statistics for environmental layers
+```{r}
+summary(egv2020)
+```
+
+Select variables to include in the model
+```{r}
+names(egv2020)
+#egv2020<-egv2020[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check egv structure
+print(egv2020)
+```
+
+Plot environmental variables on geographical space
+```{r}
+plot(egv2020)
+```
+
+## 2050
+Load environmental variables for 2050
+```{r}
+layers2050<-list.files(path=path2050,pattern='asc',full.names=TRUE)
+# Make the stack
+egv2050<-stack(layers2050)
+# Check egv structure
+print(egv2050)
+```
+
+ Descriptive statistics for environmental layers
+```{r}
+summary(egv2050)
+```
+ 
+Select variables to include in the model
+```{r}
+names(egv2050)
+#egv2050<-egv2050[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check egv structure
+print(egv2050)
+```
+
+Plot environmental variables on geographical space
+```{r}
+plot(egv2050)
+```
+
+## 2080
+Load environmental variables for 2080
+```{r}
+layers2080<-list.files(path=path2080,pattern='asc',full.names=TRUE)
+# Make the stack
+egv2080<-stack(layers2080)
+# Check egv structure
+print(egv2080)
+```
+
+Descriptive statistics for environmental layers
+```{r}
+summary(egv2080)
+```
+
+Select variables to include in the model
+```{r}
+names(egv2080)
+#egv2080<-egv2080[[c("bio_03","bio_07","bio_08","bio_10","bio_16","bio_18")]]
+# Check egv structure
+print(egv2080)
+```
+
+Plot environmental variables on geographical space
+```{r}
+plot(egv2080)
+```
+
+# Project models to future scenarios
+
+## BIOCLIM
+### Project the model to 2020
+```{r}
+p.bc.20 = predict(egv2020,bc)
+p.bc.20
+```
+
+# Plot the model in the geographical space
+```{r}
+plot(p.bc.20)
+```
+
+Export Bioclim 2020 model
+```{r}
+writeRaster(p.bc.20,path2bioclim2020,format="HFA",overwrite=TRUE)
+```
+
+### Project the model to 2050
+```{r}
+p.bc.50 = predict(egv2050,bc)
+p.bc.50
+```
+
+Plot the model in the geographical space
+```{r}
+plot(p.bc.50)
+```
+
+Export Bioclim 2050 model
+```{r}
+writeRaster(p.bc.50,path2bioclim2050,format="HFA",overwrite=TRUE)
+```
+
+### Project the model to 2080
+```{r}
+p.bc.80 = predict(egv2080,bc)
+p.bc.80
+```
+
+Plot the model in the geographical space
+```{r}
+plot(p.bc.80)
+```
+Export Bioclim 2080 model
+```{r}
+writeRaster(p.bc.80,path2bioclim2080,format="HFA",overwrite=TRUE)
+```
+
+### Plot Bioclim current and future models
+```{r}
+par(mfrow=c(2,2))
+plot(p.bc,main='Bioclim current')
+plot(p.bc.20,main='Bioclim 2020')
+plot(p.bc.50,main='Bioclim 2050')
+plot(p.bc.80,main='Bioclim 2080')
+# Reset par function
+par(mfrow=c(1,1))
+```
+
+## DOMAIN
+
+### Project the model to 2020
+```{r}
+p.dm.20 = predict(egv2020, dm)
+p.dm.20
+```
+
+
+ Plot the model in the geographical space
+```{r}
+plot(p.dm.20)
+```
+
+Export domain 2020 model
+```{r}
+writeRaster(p.dm.20,path2domain2020,format="HFA",overwrite=TRUE)
+```
+
+
+### Project the model to 2050
+```{r}
+p.dm.50 = predict(egv2050,dm)
+p.dm.50
+```
+
+# Plot the model in the geographical space
+```{r}
+plot(p.dm.50)
+```
+
+# Export domain 2050 model
+```{r}
+writeRaster(p.dm.50,path2domain2050,format="HFA",overwrite=TRUE)
+```
+
+
+### Project the model to 2080
+
+```{r}
+p.dm.80 = predict(egv2080,dm)
+p.dm.80
+```
+
+Plot the model in the geographical space
+```{r}
+plot(p.dm.80)
+```
+
+Export domain 2080 model
+```{r}
+writeRaster(p.dm.80,path2domain2080,format="HFA",overwrite=TRUE)
+```
+
+
+Plot domain current and future models
+```{r}
+par(mfrow=c(2,2))
+plot(p.dm,main='Domain current')
+plot(p.dm.20,main='Domain 2020')
+plot(p.dm.50,main='Domain 2050')
+plot(p.dm.80,main='Domain 2080')
+#Reset par function
+par(mfrow=c(1,1))
+```
+
+## Plot bioclim and domain current and future models
+```{r}
+par(mfrow=c(2,4))
+plot(p.bc,main='Bioclim current')
+plot(p.bc.20,main='Bioclim 2020')
+plot(p.bc.50,main='Bioclim 2050')
+plot(p.bc.80,main='Bioclim 2080')
+plot(p.dm,main='Domain current')
+plot(p.dm.20,main='Domain 2020')
+plot(p.dm.50,main='Domain 2050')
+plot(p.dm.80,main='Domain 2080')
+#Reset par function
+par(mfrow=c(1,1))
+```
+
+## Threshold all models
+```{r}
+tr.bc.20<-p.bc.20>tr.b
+tr.bc.50<-p.bc.50>tr.b
+tr.bc.80<-p.bc.80>tr.b
+tr.dm.20<-p.dm.20>tr.d
+tr.dm.50<-p.dm.50>tr.d
+tr.dm.80<-p.dm.80>tr.d
+```
+
+Plot thresholded bioclim and domain current and future models
+```{r}
+par(mfrow=c(2,4))
+plot(tr.bc,main='Bioclim current')
+plot(tr.bc.20,main='Bioclim 2020')
+plot(tr.bc.50,main='Bioclim 2050')
+plot(tr.bc.80,main='Bioclim 2080')
+points(data.train,pch='+')
+plot(tr.dm,main='Domain current')
+plot(tr.dm.20,main='Domain 2020')
+plot(tr.dm.50,main='Domain 2050')
+plot(tr.dm.80,main='Domain 2080')
+points(data.train,pch='+')
+#Reset par function
+par(mfrow=c(1,1))
+```
+
