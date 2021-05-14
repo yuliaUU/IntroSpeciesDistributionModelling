@@ -1,0 +1,219 @@
+#################################################
+# Niche Quantification with Ordination techniques
+#################################################
+
+# load ecospat package
+library(ecospat)
+library(raster)
+
+# Set your paths
+#setwd("/home/neftali/Documents/lectures/enm/intro")
+setwd("C:/Users/nefta/Documents/lectures/enm/intro")
+
+# path to layers from area 1
+path2area1<-"./layers/pyrenees/area_1"
+# path to layers from area 2
+path2area2<-"./layers/pyrenees/area_2"
+# path to species 1
+path2sp1<-"./layers/pyrenees/species1.csv"
+# path to species 2
+path2sp2<-"./layers/pyrenees/species2.csv"
+# path to plot 1
+path2plot1<-"./results/ecospat/plot_pca_env_1.jpg"
+# path to plot 2
+path2plot2<-"./results/ecospat/plot_pca_env_2.jpg"
+
+###########################
+# Load environmental layers
+egv1<-stack(list.files(path=path2area1,pattern='asc',full.names=TRUE ))
+# Descriptive statistics for environmental layers
+summary(egv1)
+# Plot variables
+plot(egv1)
+
+# Load environmental layers
+egv2<-stack(list.files(path=path2area2,pattern='asc',full.names=TRUE ))
+# Descriptive statistics for environmental layers
+summary(egv2)
+# Plot variables
+plot(egv2)
+
+# Sample Environmental Variables
+# for species 1
+clim1<-data.frame(rasterToPoints(egv1))
+head(clim1)
+View(clim1)
+# for species 2
+clim2<-data.frame(rasterToPoints(egv2))
+head(clim2)
+View(clim2)
+
+# global climate for both ranges
+clim12<-rbind(clim1,clim2)
+head(clim12)
+
+###########################
+# loading occurrence sites for the species (column names should be x,y)
+# species 1
+occ.sp1<-na.exclude(read.delim(path2sp1,h=T,sep=","))
+# check species 1
+head(occ.sp1)
+str(occ.sp1)
+# Plot species 1
+plot(occ.sp1$x,occ.sp1$y)
+# species 2
+occ.sp2<-na.exclude(read.delim(path2sp2,h=T,sep=","))
+# check species 2
+head(occ.sp2)
+str(occ.sp2)
+# Plot species 2
+plot(occ.sp2$x,occ.sp2$y)
+
+###########################
+# Add environmental values to the species dataframe 1 with ecospat.sample.envar
+##ARGUMENTS
+##dfsp: species dataframe with x, y and optional other variables
+##colspxy: the range of columns for x and y in dfsp
+##colspkept: the columns of dfsp that should be kept in the final dataframe (by default: xy )
+##dfvar: environmental dataframe with x, y and environmental variables
+##colvarxy: the range of columns for x and y in dfvar
+##colvar: the range of enviromental variables columns in dfvar. (by default: all exept xy )
+##resolution: distance between x,y of species and environmental datafreme after which values shouldn't be added 
+# resolution should be the resolution of the climate data grid
+occ.sp1<-na.exclude(ecospat.sample.envar(dfsp=occ.sp1,
+                                         colspxy=2:3,
+                                         colspkept=1:3,
+                                         dfvar=clim1,
+                                         colvarxy=1:2,
+                                         colvar=3:5,
+                                         resolution=0.008333334))
+
+# Add environmental values to the species dataframe 2 with ecospat.sample.envar
+# resolution should be the resolution of the climate data grid
+occ.sp2<-na.exclude(ecospat.sample.envar(dfsp=occ.sp2,
+                                         colspxy=2:3,
+                                         colspkept=1:3,
+                                         dfvar=clim2,
+                                         colvarxy=1:2,
+                                         colvar=3:5,
+                                         resolution=0.008333334))
+
+# join both species dataframes
+occ.sp<-rbind(occ.sp1,occ.sp2)
+# check species
+head(occ.sp)
+str(occ.sp)
+# Plot species
+plot(occ.sp$x,occ.sp$y)
+
+# list of species
+sp.list<-levels(occ.sp[,1])
+sp.list
+
+# selection of variables to include in the analyses
+# number of variables in clim12
+Xvar<-c(3:5)
+nvar<-length(Xvar)
+#number of interation for the tests of equivalency and similarity
+iterations<-100
+#resolution of the gridding of the climate space
+R=100
+
+###################################################################
+############################ PCA-ENVIRONMENT ######################
+###################################################################
+
+data<-rbind(occ.sp[,Xvar+1],clim12[,Xvar])
+#dataset for the analysis,includes all the sites of the study area + the occurences for all the species
+head(data)
+
+#vector of weight, 0 for the occurences, 1 for the sites of the study area
+w<-c(rep(0,nrow(occ.sp)),rep(1,nrow(clim12)))
+
+# the pca is calibrated on all the sites of the study area
+# occurences are not used for the calibration, but their scores are calculated
+pca.cal <-dudi.pca(data, row.w = w, center = T, scale = T, scannf = F, nf = 2)
+
+####### selection of species ######
+sp.list
+sp.combn<-combn(1:2,2)
+# indicate where is the species field in occ.sp
+for(i in 1:ncol(sp.combn)) {
+  row.sp1<-which(occ.sp[,1] == sp.list[sp.combn[1,i]]) # rows in data corresponding to sp1
+  row.sp2<-which(occ.sp[,1] == sp.list[sp.combn[2,i]]) # rows in data corresponding to sp2
+  name.sp1<-sp.list[sp.combn[1,i]]
+  name.sp2<-sp.list[sp.combn[2,i]]
+  # predict the scores on the axes
+  scores.clim<- pca.cal$li[(nrow(occ.sp)+1):nrow(data),]
+  #scores for global climate
+  scores.sp1<- pca.cal$li[row.sp1,]
+  #scores for sp1
+  scores.sp2<- pca.cal$li[row.sp2,]
+  #scores for sp2
+}
+
+# Dynamic Occurrence Densities Grid ecospat.grid.clim.dyn
+z1.dyn<-ecospat.grid.clim.dyn (scores.clim, scores.clim, scores.sp1, R=100)
+z2.dyn<-ecospat.grid.clim.dyn (scores.clim, scores.clim, scores.sp2, R=100)
+
+# Niche Equivalency Test ecospat.niche.equivalency.test
+a.dyn<-ecospat.niche.equivalency.test(z1=z1.dyn , z2=z2.dyn, rep=100)
+
+# Niche Similarity Test ecospat.niche.similarity.test
+b.dyn<-ecospat.niche.similarity.test(z1=z1.dyn , z2=z2.dyn, rep=100)
+b2.dyn<-ecospat.niche.similarity.test(z1=z2.dyn , z2=z1.dyn, rep=100)
+
+###### FIRST PLOT
+# Save the first plot
+jpeg(path2plot1, width = 1500, height = 1500, units = "px", pointsize = 30,quality =100)
+# Make a 2x2 plot
+par(mfrow = c(2, 2))
+
+# Plot Species Density ecospat.plot.niche for the first species
+z1<- ecospat.grid.clim.dyn(scores.clim,scores.clim,scores.sp1,R)
+# The plot shows the occupancy of species 1 (grey gradient) and environmental availability in the study area (solid line shows 100% of available climates; dashed line shows 50% most frequent available climates)
+ecospat.plot.niche (z1, title="sp1", name.axis1="PC1", name.axis2="PC2",cor=F)
+
+# Plot Species Density ecospat.plot.niche for the second species
+z2<- ecospat.grid.clim.dyn(scores.clim,scores.clim,scores.sp2,R)
+# The plot shows the occupancy of species 2 (grey gradient) and environmental availability in the study area (solid line shows 100% of available climates; dashed line shows 50% most frequent available climates)
+ecospat.plot.niche (z2, title="sp2", name.axis1="PC1", name.axis2="PC2",cor=F)
+
+# Niche Categories and Species Density ecospat.plot.niche.dyn
+# Green pixels indicate the unfilled niche (native only), blue pixels the stable niche (common between native and invasive) and red pixels the expansion of the niche (invasive only)
+ecospat.plot.niche.dyn(z1.dyn, z2.dyn, title="Niche Categories and Species Density",quant=0.75)
+
+# Draw Centroid Arrows
+ecospat.shift.centroids (scores.sp1, scores.sp2, clim1,clim2)
+# The arrow indicates the change in the centroid of the niche
+
+test<-ecospat.niche.dyn.index (z1.dyn, z2.dyn, intersection=NA)
+test
+
+dev.off()
+
+###### SECOND PLOT
+# Save the first plot
+jpeg(path2plot2, width = 1500, height = 1500, units = "px", pointsize = 30,quality =100)
+# Make a 2x2 plot 
+par(mfrow = c(2, 2))
+# Plot Variables Contribution ecospat.plot.contrib
+ecospat.plot.contrib(contrib=pca.cal$co, eigen=pca.cal$eig)
+
+# The correlation circle indicate the contribution of original predictors to the PCA axes
+ecospat.niche.overlap (z1=z1.dyn, z2=z2.dyn, cor=TRUE)
+
+# Plot Overlap Test ecospat.plot.overlap.test Equivalency
+# The plot indicates that the observed overlap is lower than 95% of simulated overlaps. The assumption of niche equivalency is thus rejected
+ecospat.plot.overlap.test(a.dyn,"D","Equivalency")
+
+# Similarity 2->1
+# The plot indicates that the observed overlap is within 95% of simulated overlaps. The assumption of niche similarity thus cannot be rejected
+ecospat.plot.overlap.test(b.dyn,"D","Similarity 2->1")
+
+# Similarity 1->2
+# The plot indicates that the observed overlap is within 95% of simulated overlaps. The assumption of niche similarity thus cannot be rejected
+ecospat.plot.overlap.test(b2.dyn,"D","Similarity 1->2")
+
+dev.off()
+

@@ -1,0 +1,2 @@
+java -cp maxent.jar density.Convert path_to_maxent_models mxe path_to_exported_maxent_models asc
+if errorlevel 1 pause
